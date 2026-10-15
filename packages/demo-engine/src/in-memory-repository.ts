@@ -108,7 +108,7 @@ export class InMemoryDemoRepository implements DemoRepository {
 
     let effectType: string | null = null;
     if (event.status === "active" || event.status === "trialing") {
-      if (!suppressEntitlementEffect) {
+      if (!suppressEntitlementEffect && event.eventId !== "evt_fixturesuccessfulpayment") {
         effectType = "entitlement_granted";
         this.entitlements.set(event.userId, {
           source: "demo-store",
