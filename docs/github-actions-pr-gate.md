@@ -65,4 +65,6 @@ npm run test:pr-gate
 4. Open the Actions run and inspect the job summary. Download the `paypath-pr-gate-<number>` artifact and review the JSON reports.
 5. In repository branch protection or rulesets, require the **Local PayPath PR Gate** status check before merging.
 
+An initial workflow smoke test can use a documentation-only pull request; the workflow still exercises the simulated billing scenarios.
+
 This verifies the local simulated gate in GitHub Actions. It does not validate a real Stripe account, Stripe Test Mode payment, webhook delivery, or Supabase network integration. Do not add Stripe or Supabase secrets to this workflow.
