@@ -174,5 +174,3 @@ export function evaluatePullRequestGate(
     },
   };
 }
-
-\n
