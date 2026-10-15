@@ -1,0 +1,32 @@
+{
+  "name": "paypath-ci",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Revenue reliability and entitlement regression testing proof of value",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @paypath/demo-saas",
+    "paypath": "tsx packages/cli/src/index.ts",
+    "test": "vitest run",
+    "test:pr-gate": "tsx scripts/pr-gate.ts",
+    "test:supabase-integration": "node --env-file-if-exists=.env.integration.local --import tsx packages/supabase-adapter/src/integration-check.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build:demo": "npm run build --workspace @paypath/demo-saas",
+    "build": "npm run build:demo"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.6",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2",
+    "vite": "^8.3.4",
+    "vitest": "^4.1.11"
+  }
+}

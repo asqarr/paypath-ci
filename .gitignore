@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+artifacts/
+.env
+.env.*
+!.env.example
+*.log
+paypath-report.json
+.paypath-*.json
+*.tsbuildinfo

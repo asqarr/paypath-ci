@@ -1,0 +1,15 @@
+{
+  "name": "@paypath/supabase-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@paypath/core": "0.1.0",
+    "@paypath/demo-engine": "0.1.0",
+    "@supabase/supabase-js": "^2.117.3",
+    "zod": "^4.1.12"
+  }
+}

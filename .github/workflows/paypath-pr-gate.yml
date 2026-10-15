@@ -1,0 +1,74 @@
+name: PayPath CI PR Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paypath-pr-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  local-pr-gate:
+    name: Local PayPath PR Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out PR code without a persisted token
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Install locked dependencies
+        id: install
+        run: npm ci
+
+      - name: Run unit tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm test
+
+      - name: Run TypeScript typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run typecheck
+
+      - name: Build Demo SaaS
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run build:demo
+
+      - name: Verify the PayPath PR gate and expected bug detections
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:pr-gate
+
+      - name: Add PayPath results to the job summary
+        if: always()
+        run: |
+          if [[ -f artifacts/paypath-pr-gate-summary.md ]]; then
+            cat artifacts/paypath-pr-gate-summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo '# PayPath CI PR Gate'
+              echo
+              echo 'The gate did not produce a report. Review the failed job step above.'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload PayPath JSON reports and summary
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: paypath-pr-gate-${{ github.event.pull_request.number }}
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 7
