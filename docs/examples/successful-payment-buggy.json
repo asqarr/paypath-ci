@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "runId": "paypath-1792182710757-3hhtid",
+  "generatedAt": "2026-10-16T20:31:50.757Z",
+  "source": "local-fixture",
+  "results": [
+    {
+      "scenario": "successful-payment",
+      "scenarioName": "Successful payment grants Pro access",
+      "executionTimestamp": "2026-10-16T20:31:50.754Z",
+      "durationMs": 3,
+      "status": "FAIL",
+      "errorCode": "ENTITLEMENT_NOT_GRANTED",
+      "expected": {
+        "proAccess": true,
+        "maximumBusinessEffectsPerEvent": 1
+      },
+      "actual": {
+        "stripeStatus": "active",
+        "applicationSubscriptionId": "sub_fixturesuccessfulpayment",
+        "paymentStatus": "paid",
+        "billingEvaluationTime": "2026-10-16T20:31:50.755Z",
+        "evaluationTimeSource": "fixture",
+        "persistedProAccess": false,
+        "authorizedProAccess": false,
+        "repeatedEventIds": [],
+        "businessEffects": []
+      },
+      "evidence": [
+        "Local deterministic fixture; no Stripe or Supabase request was made.",
+        "Demo application processed 1 webhook delivery/deliveries.",
+        "Stripe subscription status is active.",
+        "Stripe latest invoice payment status is paid.",
+        "Persisted Pro entitlement is false. Expected true.",
+        "Application authorization returned Pro access false (HTTP 403); expected true."
+      ],
+      "reproductionSteps": [
+        "Start with a test subscription whose Stripe status is active.",
+        "Deliver its subscription-created or subscription-updated event once.",
+        "Compare the persisted entitlement and authorization response with the billing policy."
+      ],
+      "source": "local-fixture"
+    }
+  ],
+  "summary": {
+    "passed": 0,
+    "failed": 1,
+    "errors": 0,
+    "inconclusive": 0
+  }
+}
