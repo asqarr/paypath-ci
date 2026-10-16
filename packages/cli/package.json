@@ -1,14 +1,26 @@
 {
   "name": "@paypath/cli",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "bin": {
+    "paypath": "./dist/paypath.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node build.mjs"
+  },
   "dependencies": {
-    "@paypath/core": "0.1.0",
-    "@paypath/demo-engine": "0.1.0",
-    "@paypath/stripe-adapter": "0.1.0",
-    "@paypath/supabase-adapter": "0.1.0",
+    "@supabase/supabase-js": "^2.117.3",
     "dotenv": "^16.6.1",
+    "stripe": "^23.0.0",
     "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }
