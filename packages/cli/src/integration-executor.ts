@@ -32,12 +32,24 @@ function unavailable(message: string): ScenarioObservations {
   return {
     billing: null,
     applicationSubscriptionId: null,
-    entitlement: null,
+    entitlement: { status: "unavailable" },
     authorization: null,
     webhookDeliveries: [],
     businessEffects: [],
     notes: [message, "Integration was not reported as passed."],
   };
+}
+
+type ReadResult<T> = { status: "available"; value: T } | { status: "unavailable" };
+
+async function readEvidence<T>(read: () => Promise<T>): Promise<ReadResult<T>> {
+  try {
+    return { status: "available", value: await read() };
+  } catch {
+    // Keep the underlying error private; the Core only needs to know that this
+    // source could not provide evidence for a deterministic assertion.
+    return { status: "unavailable" };
+  }
 }
 
 export class IntegrationScenarioExecutor implements ScenarioExecutor {
@@ -65,12 +77,19 @@ export class IntegrationScenarioExecutor implements ScenarioExecutor {
     const supabase = createSupabaseTestClient(supabaseConfig);
     const repository = new SupabaseDemoRepository(supabase);
 
-    const [billing, applicationSubscription, entitlement, authorizationResponse] = await Promise.all([
+    const [billing, subscriptionRead, entitlementRead, authorizationResponse] = await Promise.all([
       readStripeSubscription(stripe, stripeConfig.subscriptionId, supabaseConfig.userId),
-      repository.getSubscription(supabaseConfig.userId),
-      repository.getEntitlement(supabaseConfig.userId),
+      readEvidence(() => repository.getSubscription(supabaseConfig.userId)),
+      readEvidence(() => repository.getEntitlement(supabaseConfig.userId)),
       this.readAuthorization(selected["PAYPATH_DEMO_BASE_URL"] ?? "http://localhost:3000", supabaseConfig.userId),
     ]);
+
+    const applicationSubscription = subscriptionRead.status === "available" ? subscriptionRead.value : null;
+    const entitlement = entitlementRead.status === "unavailable"
+      ? { status: "unavailable" as const }
+      : entitlementRead.value === null
+        ? { status: "absent" as const, source: "supabase" as const, userId: supabaseConfig.userId }
+        : { status: "present" as const, snapshot: entitlementRead.value };
 
     let deliveries: ScenarioObservations["webhookDeliveries"] = [];
     let businessEffects: ScenarioObservations["businessEffects"] = [];
@@ -79,10 +98,13 @@ export class IntegrationScenarioExecutor implements ScenarioExecutor {
       `Latest invoice payment status: ${billing.paymentStatus}.`,
       `Billing evaluation time source: ${billing.evaluationTimeSource}${billing.evaluationTime === null ? " (clock not ready)" : ` (${billing.evaluationTime})`}.`,
       ...(billing.currentPeriodEnd === null ? ["Billing period end could not be verified; the scenario cannot pass."] : []),
-      `Supabase test project ${supabaseConfig.projectRef} returned the persisted entitlement.`,
-      ...(applicationSubscription === null
-        ? ["No persisted application subscription was found for the configured test user."]
-        : [`Application subscription record ${applicationSubscription.subscriptionId} was read.`]),
+      `Supabase test project ${supabaseConfig.projectRef} completed the entitlement lookup.`,
+      ...(subscriptionRead.status === "unavailable"
+        ? ["Supabase subscription evidence could not be read."]
+        : applicationSubscription === null
+          ? ["No persisted application subscription was found for the configured test user."]
+          : [`Application subscription record ${applicationSubscription.subscriptionId} was read.`]),
+      ...(entitlementRead.status === "unavailable" ? ["Supabase entitlement evidence could not be read."] : []),
       "Application authorization was read over HTTP; this check did not mutate Stripe or Supabase.",
     ];
 

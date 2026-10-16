@@ -44,7 +44,10 @@ describe("PayPath entitlement truth engine", () => {
         checkedAt: new Date().toISOString(),
       },
       applicationSubscriptionId: "sub_safe",
-      entitlement: { source: "demo-store", userId: "user_safe", proAccess: true, updatedAt: new Date().toISOString() },
+      entitlement: {
+        status: "present",
+        snapshot: { source: "demo-store", userId: "user_safe", proAccess: true, updatedAt: new Date().toISOString() },
+      },
       authorization: {
         source: "local-api",
         userId: "user_safe",
@@ -106,7 +109,7 @@ describe("PayPath entitlement truth engine", () => {
       execute: async () => ({
         billing: null,
         applicationSubscriptionId: null,
-        entitlement: null,
+        entitlement: { status: "unavailable" },
         authorization: null,
         webhookDeliveries: [],
         businessEffects: [],
@@ -127,7 +130,10 @@ describe("PayPath entitlement truth engine", () => {
           checkedAt: new Date().toISOString(),
         },
         applicationSubscriptionId: "sub_pending",
-        entitlement: { source: "demo-store", userId: "user_pending", proAccess: true, updatedAt: null },
+        entitlement: {
+          status: "present",
+          snapshot: { source: "demo-store", userId: "user_pending", proAccess: true, updatedAt: null },
+        },
         authorization: {
           source: "local-api",
           userId: "user_pending",
@@ -149,6 +155,85 @@ describe("PayPath entitlement truth engine", () => {
     expect(noPaymentProofResult.errorCode).toBe("BILLING_PRECONDITION_NOT_MET");
   });
 
+  it("fails successful payment when a completed entitlement lookup confirms there is no row", async () => {
+    const observations = await new LocalScenarioExecutor("fixed").execute("successful-payment");
+    const userId = observations.authorization!.userId;
+    observations.entitlement = { status: "absent", source: "supabase", userId };
+    observations.authorization = { ...observations.authorization!, httpStatus: 403, proAccess: false };
+
+    const result = await runScenario({ execute: async () => observations }, "successful-payment");
+
+    expect(result.status).toBe("FAIL");
+    expect(result.errorCode).toBe("ENTITLEMENT_NOT_GRANTED");
+    expect(result.actual.persistedProAccess).toBe(false);
+    expect(result.evidence).toContain(
+      `Persisted Pro entitlement is false (no row found for ${userId} after a successful lookup). Expected true.`,
+    );
+  });
+
+  it("fails successful payment when the persisted entitlement is explicitly inactive", async () => {
+    const observations = await new LocalScenarioExecutor("fixed").execute("successful-payment");
+    if (observations.entitlement.status !== "present") throw new Error("Expected a persisted entitlement fixture.");
+    observations.entitlement.snapshot.proAccess = false;
+    observations.authorization = { ...observations.authorization!, httpStatus: 403, proAccess: false };
+
+    const result = await runScenario({ execute: async () => observations }, "successful-payment");
+
+    expect(result.status).toBe("FAIL");
+    expect(result.errorCode).toBe("ENTITLEMENT_NOT_GRANTED");
+  });
+
+  it("passes successful payment when persisted entitlement and authorization both grant access", async () => {
+    const observations = await new LocalScenarioExecutor("fixed").execute("successful-payment");
+
+    const result = await runScenario({ execute: async () => observations }, "successful-payment");
+
+    expect(result.status).toBe("PASS");
+    expect(result.errorCode).toBeNull();
+  });
+
+  it("keeps a failed Supabase entitlement read inconclusive", async () => {
+    const observations = await new LocalScenarioExecutor("fixed").execute("successful-payment");
+    observations.entitlement = { status: "unavailable" };
+
+    const result = await runScenario({ execute: async () => observations }, "successful-payment");
+
+    expect(result.status).toBe("INCONCLUSIVE");
+    expect(result.errorCode).toBe("EVIDENCE_INCOMPLETE");
+    expect(result.errorCode).not.toBe("ENTITLEMENT_NOT_GRANTED");
+  });
+
+  it("keeps invalid entitlement values inconclusive", async () => {
+    const observations = await new LocalScenarioExecutor("fixed").execute("successful-payment");
+    if (observations.entitlement.status !== "present") throw new Error("Expected a persisted entitlement fixture.");
+    observations.entitlement.snapshot.proAccess = null;
+
+    const result = await runScenario({ execute: async () => observations }, "successful-payment");
+
+    expect(result.status).toBe("INCONCLUSIVE");
+    expect(result.errorCode).toBe("EVIDENCE_INCOMPLETE");
+  });
+
+  it("does not report entitlement-not-granted before payment and active-subscription preconditions hold", async () => {
+    const unpaid = await new LocalScenarioExecutor("fixed").execute("successful-payment");
+    unpaid.billing!.paymentStatus = "not_paid";
+    unpaid.entitlement = { status: "absent", source: "supabase", userId: unpaid.authorization!.userId };
+    unpaid.authorization = { ...unpaid.authorization!, httpStatus: 403, proAccess: false };
+
+    const inactive = await new LocalScenarioExecutor("fixed").execute("successful-payment");
+    inactive.billing!.status = "canceled";
+    inactive.entitlement = { status: "absent", source: "supabase", userId: inactive.authorization!.userId };
+    inactive.authorization = { ...inactive.authorization!, httpStatus: 403, proAccess: false };
+
+    const unpaidResult = await runScenario({ execute: async () => unpaid }, "successful-payment");
+    const inactiveResult = await runScenario({ execute: async () => inactive }, "successful-payment");
+
+    expect(unpaidResult.status).toBe("INCONCLUSIVE");
+    expect(unpaidResult.errorCode).toBe("BILLING_PRECONDITION_NOT_MET");
+    expect(inactiveResult.status).toBe("INCONCLUSIVE");
+    expect(inactiveResult.errorCode).toBe("BILLING_PRECONDITION_NOT_MET");
+  });
+
   it("keeps access during a scheduled cancellation period and revokes after an immediate cancellation", async () => {
     const now = new Date().toISOString();
     const activeDuringScheduledCancel: ScenarioExecutor = {
@@ -165,7 +250,10 @@ describe("PayPath entitlement truth engine", () => {
           checkedAt: now,
         },
         applicationSubscriptionId: "sub_cancel_at_period_end",
-        entitlement: { source: "demo-store", userId: "user_scheduled", proAccess: true, updatedAt: now },
+        entitlement: {
+          status: "present",
+          snapshot: { source: "demo-store", userId: "user_scheduled", proAccess: true, updatedAt: now },
+        },
         authorization: {
           source: "local-api",
           userId: "user_scheduled",
@@ -192,7 +280,10 @@ describe("PayPath entitlement truth engine", () => {
           checkedAt: now,
         },
         applicationSubscriptionId: "sub_canceled_now",
-        entitlement: { source: "demo-store", userId: "user_immediate", proAccess: false, updatedAt: now },
+        entitlement: {
+          status: "present",
+          snapshot: { source: "demo-store", userId: "user_immediate", proAccess: false, updatedAt: now },
+        },
         authorization: {
           source: "local-api",
           userId: "user_immediate",

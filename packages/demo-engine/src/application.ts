@@ -48,12 +48,12 @@ export class DemoApplication {
 
   async authorize(userId: string): Promise<AuthorizationSnapshot> {
     const entitlement = await this.repository.getEntitlement(userId);
-    if (entitlement === null) throw new Error("Entitlement lookup returned no result.");
+    const proAccess = entitlement?.proAccess ?? false;
     return {
       source: "local-api",
       userId,
-      httpStatus: entitlement.proAccess ? 200 : 403,
-      proAccess: entitlement.proAccess,
+      httpStatus: proAccess ? 200 : 403,
+      proAccess,
       checkedAt: new Date().toISOString(),
     };
   }

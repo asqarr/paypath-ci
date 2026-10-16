@@ -34,6 +34,15 @@ export interface EntitlementSnapshot {
   updatedAt: string | null;
 }
 
+/**
+ * Distinguishes a successful lookup with no row from a lookup that could not
+ * provide evidence. An absent row is a verified lack of persisted access.
+ */
+export type EntitlementEvidence =
+  | { status: "present"; snapshot: EntitlementSnapshot }
+  | { status: "absent"; source: EntitlementSnapshot["source"]; userId: string }
+  | { status: "unavailable" };
+
 export interface AuthorizationSnapshot {
   source: "demo-api" | "local-api";
   userId: string;
@@ -57,7 +66,7 @@ export interface BusinessEffectEvidence {
 export interface ScenarioObservations {
   billing: BillingSnapshot | null;
   applicationSubscriptionId: string | null;
-  entitlement: EntitlementSnapshot | null;
+  entitlement: EntitlementEvidence;
   authorization: AuthorizationSnapshot | null;
   webhookDeliveries: WebhookDeliveryEvidence[];
   businessEffects: BusinessEffectEvidence[];
