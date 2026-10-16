@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DemoApplication } from "./application.ts";
 import { InMemoryDemoRepository } from "./in-memory-repository.ts";
 
@@ -12,6 +12,44 @@ const event = {
   currentPeriodEnd: new Date(Date.now() + 60_000).toISOString(),
   cancelAtPeriodEnd: false,
 };
+
+describe("Demo entitlement authorization", () => {
+  const userId = "paypath-test-no-entitlement";
+
+  it("denies access when no entitlement record exists", async () => {
+    const repository = new InMemoryDemoRepository();
+    const app = new DemoApplication(repository, { mode: "fixed", scenario: null });
+
+    await expect(app.authorize(userId)).resolves.toMatchObject({
+      userId,
+      httpStatus: 403,
+      proAccess: false,
+    });
+  });
+
+  it("allows access when an active entitlement exists", async () => {
+    const repository = new InMemoryDemoRepository();
+    await repository.seedEntitlement(userId, true);
+    const app = new DemoApplication(repository, { mode: "fixed", scenario: null });
+
+    await expect(app.authorize(userId)).resolves.toMatchObject({
+      userId,
+      httpStatus: 200,
+      proAccess: true,
+    });
+  });
+
+  it("propagates Supabase repository failures instead of treating them as no access", async () => {
+    const repository = new InMemoryDemoRepository();
+    const infrastructureError = Object.assign(new Error("Supabase read failed"), {
+      name: "SupabaseDatabaseError",
+    });
+    vi.spyOn(repository, "getEntitlement").mockRejectedValue(infrastructureError);
+    const app = new DemoApplication(repository, { mode: "fixed", scenario: null });
+
+    await expect(app.authorize(userId)).rejects.toBe(infrastructureError);
+  });
+});
 
 describe("Demo webhook application", () => {
   it("records deliveries separately from idempotent business processing", async () => {

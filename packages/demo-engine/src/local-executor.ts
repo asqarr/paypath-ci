@@ -72,7 +72,10 @@ export class LocalScenarioExecutor implements ScenarioExecutor {
     return {
       billing,
       applicationSubscriptionId: subscription?.subscriptionId ?? null,
-      entitlement,
+      entitlement:
+        entitlement === null
+          ? { status: "absent", source: "demo-store", userId: event.userId }
+          : { status: "present", snapshot: entitlement },
       authorization,
       webhookDeliveries:
         delivery === null

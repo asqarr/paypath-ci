@@ -1,5 +1,6 @@
 import { createStripeTestClient, verifyStripeWebhook } from "@paypath/stripe-adapter";
 import { z } from "zod";
+import { logWebhookProcessingFailure } from "./diagnostics.ts";
 import { getDemoServices } from "../../../../lib/services.ts";
 
 export const runtime = "nodejs";
@@ -74,7 +75,8 @@ export async function POST(request: Request): Promise<Response> {
       stale: processing.stale,
       orderingAmbiguous: processing.orderingAmbiguous,
     });
-  } catch {
+  } catch (error) {
+    logWebhookProcessingFailure(error);
     return Response.json({ error: "Verified webhook could not be processed." }, { status: 500 });
   }
 }

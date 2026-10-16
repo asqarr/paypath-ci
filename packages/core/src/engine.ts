@@ -1,6 +1,7 @@
 import { SCENARIOS, isActiveSubscription } from "./scenarios.ts";
 import type {
   ActualState,
+  EntitlementEvidence,
   ErrorCode,
   ExpectedState,
   ScenarioExecutor,
@@ -62,11 +63,39 @@ function actualState(observations: ScenarioObservations): ActualState {
     paymentStatus: observations.billing?.paymentStatus ?? null,
     billingEvaluationTime: observations.billing?.evaluationTime ?? null,
     evaluationTimeSource: observations.billing?.evaluationTimeSource ?? null,
-    persistedProAccess: observations.entitlement?.proAccess ?? null,
+    persistedProAccess: persistedEntitlementAccess(observations.entitlement),
     authorizedProAccess: observations.authorization?.proAccess ?? null,
     repeatedEventIds,
     businessEffects: observations.businessEffects,
   };
+}
+
+function persistedEntitlementAccess(evidence: EntitlementEvidence): boolean | null {
+  switch (evidence.status) {
+    case "present":
+      return evidence.snapshot.proAccess;
+    case "absent":
+      return false;
+    case "unavailable":
+      return null;
+  }
+}
+
+function entitlementUserId(evidence: EntitlementEvidence): string | null {
+  switch (evidence.status) {
+    case "present":
+      return evidence.snapshot.userId;
+    case "absent":
+      return evidence.userId;
+    case "unavailable":
+      return null;
+  }
+}
+
+function entitlementDescription(evidence: EntitlementEvidence, access: boolean): string {
+  return evidence.status === "absent"
+    ? `Persisted Pro entitlement is false (no row found for ${evidence.userId} after a successful lookup).`
+    : `Persisted Pro entitlement is ${String(access)}.`;
 }
 
 function incompleteEvidence(observations: ScenarioObservations, scenario: ScenarioId): string[] {
@@ -83,7 +112,9 @@ function incompleteEvidence(observations: ScenarioObservations, scenario: Scenar
   ) {
     missing.push("Persisted application subscription does not match the Stripe subscription under test.");
   }
-  if (observations.entitlement === null || observations.entitlement.proAccess === null) {
+  if (observations.entitlement.status === "unavailable") {
+    missing.push("Persisted entitlement state is unavailable.");
+  } else if (observations.entitlement.status === "present" && observations.entitlement.snapshot.proAccess === null) {
     missing.push("Persisted entitlement state is unavailable.");
   }
   if (
@@ -94,9 +125,9 @@ function incompleteEvidence(observations: ScenarioObservations, scenario: Scenar
     missing.push("Application authorization result is unavailable.");
   }
   if (
-    observations.entitlement !== null &&
     observations.authorization !== null &&
-    observations.entitlement.userId !== observations.authorization.userId
+    entitlementUserId(observations.entitlement) !== null &&
+    entitlementUserId(observations.entitlement) !== observations.authorization.userId
   ) {
     missing.push("Persisted entitlement and authorization evidence belong to different users.");
   }
@@ -179,7 +210,7 @@ export async function runScenario(
     const billing = observations.billing;
     const entitlement = observations.entitlement;
     const authorization = observations.authorization;
-    if (billing === null || entitlement === null || authorization === null) {
+    if (billing === null || entitlement.status === "unavailable" || authorization === null) {
       return { ...result, status: "INCONCLUSIVE", errorCode: "EVIDENCE_INCOMPLETE" };
     }
     if (authorization.httpStatus !== 200 && authorization.httpStatus !== 403) {
@@ -192,6 +223,10 @@ export async function runScenario(
     }
 
     if (scenario === "duplicate-webhook") {
+      const persisted = persistedEntitlementAccess(entitlement);
+      if (persisted === null) {
+        return { ...result, status: "INCONCLUSIVE", errorCode: "EVIDENCE_INCOMPLETE" };
+      }
       const repeated = observations.webhookDeliveries.filter((delivery) => delivery.deliveryCount > 1);
       if (repeated.length === 0) {
         return {
@@ -234,7 +269,7 @@ export async function runScenario(
       }
       const expectedAuthorizationStatus = expected.proAccess ? 200 : 403;
       if (
-        entitlement.proAccess !== expected.proAccess ||
+        persisted !== expected.proAccess ||
         authorization.proAccess !== expected.proAccess ||
         authorization.httpStatus !== expectedAuthorizationStatus
       ) {
@@ -244,7 +279,7 @@ export async function runScenario(
           errorCode: "ENTITLEMENT_NOT_GRANTED",
           evidence: [
             ...evidence,
-            `Persisted Pro entitlement is ${String(entitlement.proAccess)}; expected ${String(expected.proAccess)}.`,
+            `${entitlementDescription(entitlement, persisted)} Expected ${String(expected.proAccess)}.`,
             `Application authorization returned Pro access ${String(authorization.proAccess)}; expected ${String(expected.proAccess)}.`,
             "No duplicate business effect was observed, but the entitlement outcome is incorrect.",
           ],
@@ -264,7 +299,10 @@ export async function runScenario(
       };
     }
 
-    const persisted = entitlement.proAccess;
+    const persisted = persistedEntitlementAccess(entitlement);
+    if (persisted === null) {
+      return { ...result, status: "INCONCLUSIVE", errorCode: "EVIDENCE_INCOMPLETE" };
+    }
     const authorized = authorization.proAccess;
     const expectedAuthorizationStatus = expected.proAccess ? 200 : 403;
     const mismatch =
@@ -280,7 +318,7 @@ export async function runScenario(
           ...evidence,
           `Stripe subscription status is ${billing.status}.`,
           `Stripe latest invoice payment status is ${billing.paymentStatus}.`,
-          `Persisted Pro entitlement is ${String(persisted)}.`,
+          entitlementDescription(entitlement, persisted),
           `Application authorization returned Pro access ${String(authorized)} (HTTP ${authorization.httpStatus}).`,
         ],
       };
@@ -295,7 +333,7 @@ export async function runScenario(
         ...evidence,
         `Stripe subscription status is ${billing.status}.`,
         `Stripe latest invoice payment status is ${billing.paymentStatus}.`,
-        `Persisted Pro entitlement is ${String(persisted)}; expected ${String(expected.proAccess)}.`,
+        `${entitlementDescription(entitlement, persisted)} Expected ${String(expected.proAccess)}.`,
         `Application authorization returned Pro access ${String(authorized)} (HTTP ${authorization.httpStatus}); expected ${String(expected.proAccess)}.`,
       ],
     };
