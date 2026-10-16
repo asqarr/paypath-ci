@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import dotenv from "dotenv";
@@ -29,10 +29,10 @@ interface CliOptions {
 function usage(): string {
   return [
     "Usage:",
-    "  npm run paypath -- doctor",
-    "  npm run paypath -- test [--mode buggy|fixed] [--scenario <id>] [--report <path>]",
-    "  npm run paypath -- test --integration [--scenario <id>] [--report <path>]",
-    "  npm run paypath -- cleanup [--test-user <id>] [--subscription-id <id>] [--project-ref <ref>]",
+    "  paypath doctor",
+    "  paypath test [--mode buggy|fixed] [--scenario <id>] [--report <path>]",
+    "  paypath test --integration [--scenario <id>] [--report <path>]",
+    "  paypath cleanup [--test-user <id>] [--subscription-id <id>] [--project-ref <ref>]",
     "",
     `Scenarios: ${SCENARIO_IDS.join(", ")}`,
   ].join("\n");
@@ -164,7 +164,20 @@ function printDoctor(): void {
 }
 
 async function main(): Promise<void> {
-  const options = parseArguments(process.argv.slice(2));
+  const args = process.argv.slice(2);
+  if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) {
+    console.log(usage());
+    return;
+  }
+  if (args.length === 1 && (args[0] === "--version" || args[0] === "-v")) {
+    const metadata: unknown = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+    if (typeof metadata !== "object" || metadata === null || !("version" in metadata) || typeof metadata.version !== "string") {
+      throw new Error("CLI package version is unavailable.");
+    }
+    console.log(metadata.version);
+    return;
+  }
+  const options = parseArguments(args);
   if (options.command === "doctor") {
     printDoctor();
     return;
