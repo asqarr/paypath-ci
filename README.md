@@ -68,9 +68,13 @@ Local mode uses runtime-generated deterministic Stripe-state fixtures and an in-
 
 ## GitHub Actions PR Gate (simulated)
 
-The [`PayPath CI PR Gate`](docs/github-actions-pr-gate.md) workflow runs the unit tests, strict TypeScript check, Demo build, and the local PR-gate runner on pull requests. Fixed scenarios must all pass. The runner also invokes Buggy mode and accepts its non-zero CLI exit only when all three intentional bugs are detected with their exact error codes. Any unexpected outcome makes the overall PR gate fail.
+The [`PayPath CI PR Gate`](docs/github-actions-pr-gate.md) workflow runs the unit tests, strict TypeScript check, Demo and GitHub App backend builds, and the local PR-gate runner on pull requests. Fixed scenarios must all pass. The runner also invokes Buggy mode and accepts its non-zero CLI exit only when all three intentional bugs are detected with their exact error codes. Any unexpected outcome makes the overall PR gate fail.
 
-The workflow uses no Stripe or Supabase credentials, grants only `contents: read`, and publishes JSON reports plus a readable job summary. These results are deterministic local fixture evidence; they do not claim a real Stripe End-to-End integration. See the linked guide for local commands, report locations, security details, and how to test a real PR after this project is pushed to GitHub.
+The workflow uses no Stripe or Supabase credentials, grants only `contents: read`, and publishes JSON reports plus a readable job summary. It builds the Demo and the GitHub App backend. These results are deterministic local fixture evidence; they do not claim a real Stripe End-to-End integration. See the linked guide for local commands, report locations, security details, and how to test a real PR after this project is pushed to GitHub.
+
+## GitHub App PR Check (integration skeleton)
+
+The [`GitHub App PR Check` guide](docs/github-app-pr-check.md) documents the first backend vertical slice. It verifies signed `pull_request` webhooks and reports a neutral Check Run on the current PR head; it does **not** execute or pass customer billing tests. The local queue is in-memory and the App installation has not been tested against GitHub.
 
 ## Run the Demo SaaS
 

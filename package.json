@@ -12,13 +12,16 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @paypath/demo-saas",
+    "dev:github-app": "npm run dev --workspace @paypath/github-app",
     "paypath": "tsx packages/cli/src/index.ts",
     "test": "vitest run",
+    "test:github-app": "vitest run packages/github-app/src",
     "test:pr-gate": "tsx scripts/pr-gate.ts",
     "test:supabase-integration": "node --env-file-if-exists=.env.integration.local --import tsx packages/supabase-adapter/src/integration-check.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build:demo": "npm run build --workspace @paypath/demo-saas",
-    "build": "npm run build:demo"
+    "build:github-app": "npm run build --workspace @paypath/github-app",
+    "build": "npm run build:demo && npm run build:github-app"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
