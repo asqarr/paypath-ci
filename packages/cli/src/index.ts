@@ -14,6 +14,7 @@ import {
 } from "@paypath/supabase-adapter";
 import { z } from "zod";
 import { IntegrationScenarioExecutor } from "./integration-executor.ts";
+import { createDoctorReport } from "./doctor.ts";
 
 dotenv.config({ path: [".env.integration.local", ".env"] });
 
@@ -142,27 +143,6 @@ async function runCleanup(target: CliOptions["cleanupTarget"]): Promise<void> {
   console.log(`Deleted ${counts.effects_deleted} effects, ${counts.events_deleted} events, ${counts.subscriptions_deleted} subscriptions, and ${counts.entitlements_deleted} entitlements from the dedicated test database.`);
 }
 
-function printDoctor(): void {
-  const nodeVersion = process.versions.node;
-  const nodeMajor = Number(nodeVersion.split(".")[0]);
-  const supportedNode = nodeMajor >= 24;
-  console.log(`Node.js: ${nodeVersion} ${supportedNode ? "OK" : "TOO OLD (need Node.js 24+)"}`);
-  if (!supportedNode) process.exitCode = 1;
-  console.log("Local deterministic engine: available (no external credentials required)");
-
-  if (process.env["STRIPE_SECRET_KEY"] === undefined && process.env["SUPABASE_URL"] === undefined) {
-    console.log("Stripe/Supabase integration: not configured (integration results will be INCONCLUSIVE)");
-    return;
-  }
-  try {
-    parseStripeTestConfiguration(process.env);
-    parseSupabaseIntegrationConfiguration(process.env);
-    console.log("Stripe/Supabase configuration: present and restricted to Stripe Test Mode plus the configured Supabase project ref");
-  } catch (error) {
-    console.log(`Stripe/Supabase configuration: incomplete or invalid (${error instanceof Error ? error.name : "invalid config"})`);
-  }
-}
-
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) {
@@ -179,7 +159,9 @@ async function main(): Promise<void> {
   }
   const options = parseArguments(args);
   if (options.command === "doctor") {
-    printDoctor();
+    const report = createDoctorReport(process.env, process.versions.node);
+    for (const line of report.lines) console.log(line);
+    if (report.exitCode !== 0) process.exitCode = report.exitCode;
     return;
   }
   if (options.command === "cleanup") {
