@@ -22,7 +22,7 @@ $tarball = Join-Path $packDir "paypath-cli-0.1.0.tgz"
 Test-Path $tarball
 ```
 
-Transfer that tarball to the pilot developer through an approved private channel. In the **customer application repository** (outside the PayPath monorepo), install the local file:
+Transfer that tarball to the pilot developer through an approved private channel. The maintainer should also provide the `pilot-integration.env.example` template through that channel (or another approved private file share); it is stored in the PayPath source checkout at `docs/pilot-integration.env.example`. Save the template as `pilot-integration.env.example` in the root of the **customer application repository** (outside the PayPath monorepo). Install the local tarball from that repository:
 
 ```powershell
 npm install --save-dev "C:\path\to\paypath-cli-0.1.0.tgz"
@@ -31,6 +31,15 @@ npm exec -- paypath --version
 ```
 
 `--version` prints the package version. The installed binary is `paypath`; it bundles PayPath's internal workspace packages, while npm installs its declared public runtime dependencies. Do not publish or upload a pilot tarball to a public registry.
+
+If you are working in a PayPath source checkout instead of the customer application repository, the template can be copied directly from its repository path:
+
+```powershell
+if (Test-Path .\.env.integration.local) {
+  throw '.env.integration.local already exists; review it before copying the template.'
+}
+Copy-Item .\docs\pilot-integration.env.example .\.env.integration.local
+```
 
 ## Local fixture proof (no external account)
 
@@ -56,10 +65,13 @@ The checked-in [Fixed report](examples/successful-payment-fixed.json) and [Buggy
 
 ## Real Integration configuration
 
-The CLI loads `.env.integration.local` first, then `.env`, from its current working directory. Keep the integration file untracked and out of browser/client bundles. Start from [`pilot-integration.env.example`](pilot-integration.env.example), copy it to `.env.integration.local` in the application repository, and replace every placeholder locally:
+The CLI loads `.env.integration.local` first, then `.env`, from its current working directory. Keep the integration file untracked and out of browser/client bundles. In a customer application repository, first obtain the template from the maintainer as described above, save it as `pilot-integration.env.example` in the repository root, and copy it to `.env.integration.local`. Replace every placeholder locally:
 
 ```powershell
-Copy-Item .\path\to\pilot-integration.env.example .\.env.integration.local
+if (Test-Path .\.env.integration.local) {
+  throw '.env.integration.local already exists; review it before copying the template.'
+}
+Copy-Item .\pilot-integration.env.example .\.env.integration.local
 notepad .\.env.integration.local
 ```
 
@@ -77,7 +89,7 @@ Required values for `paypath test --integration`:
 
 `PAYPATH_DEMO_BASE_URL` is optional and defaults to `http://localhost:3000`. Non-local Demo URLs must use HTTPS. Scenario-specific subscription and user overrides are supported as `PAYPATH_STRIPE_SUBSCRIPTION_ID_SUCCESSFUL_PAYMENT` and `PAYPATH_TEST_USER_ID_SUCCESSFUL_PAYMENT` (replace the suffix with the uppercase scenario ID, using underscores). For the duplicate-webhook scenario, `PAYPATH_WEBHOOK_EVENT_ID_DUPLICATE_WEBHOOK` or `PAYPATH_WEBHOOK_EVENT_ID` selects an already-recorded event whose delivery and business-effect rows will be read.
 
-`doctor` checks Node.js and parses available environment configuration; it does **not** contact Stripe, Supabase, or the Demo API. A `doctor` result is not proof that credentials work or that the selected project is safe. The CLI validates the `sk_test_` prefix, requires HTTPS for remote Supabase, checks that its URL ref matches `PAYPATH_TEST_SUPABASE_REF`, and requires the explicit disposable-project acknowledgment.
+`doctor` checks Node.js and parses available environment configuration; it does **not** contact Stripe, Supabase, or the Demo API. It reports known template values as `INCOMPLETE`; a syntactically valid configuration is reported as `FORMAT VALID` only. Both messages explicitly state that the connection was not tested. The command keeps its informational exit-code contract: configuration being missing, incomplete, or invalid does not by itself make `doctor` return a nonzero exit code; an unsupported Node.js version returns `1`. Therefore, a zero exit code from `doctor` is not proof that credentials work, that the selected project is safe, or that a service is reachable. The CLI validates the `sk_test_` prefix, requires HTTPS for remote Supabase, checks that its URL ref matches `PAYPATH_TEST_SUPABASE_REF`, and requires the explicit disposable-project acknowledgment.
 
 Before scanning, an operator must arrange test data through the Demo application's normal test flow: a Stripe Test Mode subscription, matching `paypath_user_id` metadata, the application's persisted subscription/entitlement state, and a reachable Demo authorization API. The Demo webhook route validates Stripe's signature when it receives an event, but the CLI scan does not itself inspect webhook signatures or prove how a persisted row was created. It does not create a Checkout, subscription, invoice, webhook delivery, or Supabase record. It retrieves the Stripe subscription and latest invoice, selects the matching Demo subscription/entitlement (and, for duplicate-webhook, event/effect evidence), and sends an HTTP `GET` to `/api/pro/feature`.
 
@@ -105,7 +117,7 @@ Every run writes JSON with `schemaVersion`, `runId`, `generatedAt`, `source`, `r
 | `ERROR` | A scenario adapter/API operation failed or returned an invalid response. | `1` for a reported scenario error. |
 | `INCONCLUSIVE` | Required evidence or the billing precondition is missing/unavailable. | `1`; never treated as a pass. |
 
-An integration adapter/configuration error caught while evaluating a scenario is reported as `ERROR` and makes the command exit `1`. An uncaught CLI usage or report-writing exception is sanitized on stderr and exits `2`. A nonzero scan must be diagnosed from the JSON report and service setup; do not rerun automatically or turn missing evidence into a pass. `doctor` currently reports invalid/incomplete configuration in its text but does not set a nonzero exit solely for that parse failure, so use the scan report as the execution result.
+An integration adapter/configuration error caught while evaluating a scenario is reported as `ERROR` and makes the command exit `1`. An uncaught CLI usage or report-writing exception is sanitized on stderr and exits `2`. A nonzero scan must be diagnosed from the JSON report and service setup; do not rerun automatically or turn missing evidence into a pass. `doctor` is informational and does not set a nonzero exit solely for missing, placeholder, or invalid integration configuration; inspect its explicit status text, and use the integration scan report—not `doctor`—as the execution result.
 
 ## Current pilot boundaries
 
