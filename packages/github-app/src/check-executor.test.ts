@@ -102,6 +102,36 @@ describe("billing safety check executor", () => {
     expect(api.completeCheckRun).toHaveBeenCalledTimes(1);
   });
 
+  it("executes one fresh Check Run when the PR is reopened on the same current SHA", async () => {
+    const queue = new InMemoryJobQueue();
+    const opened = createJob();
+    await queue.enqueue(opened);
+
+    const api = createApi();
+    const worker = new QueueWorker(
+      queue,
+      new BillingSafetyCheckExecutor({ forInstallation: () => api }),
+      { write: () => undefined },
+    );
+    await worker.drain();
+
+    const reopened = createJob({
+      deliveryId: "00000000-0000-4000-8000-000000000023",
+      action: "reopened",
+      updatedAt: opened.updatedAt + 1_000,
+    });
+    expect((await queue.enqueue(reopened)).status).toBe("queued");
+    await worker.drain();
+
+    expect(api.createCheckRun).toHaveBeenCalledTimes(2);
+    expect(api.completeCheckRun).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(api.createCheckRun).mock.calls.map(([input]) => input.headSha)).toEqual([sha, sha]);
+    for (const [input] of vi.mocked(api.completeCheckRun).mock.calls) {
+      expect(input.conclusion).toBe("neutral");
+      expect(input.summary).toContain("Customer billing tests are not configured or executed.");
+    }
+  });
+
   it("keeps GitHub API failures structured and does not log response messages or credentials", async () => {
     const secretLikeValue = "synthetic-installation-token-never-log";
     const rawGitHubError = Object.assign(new Error(`Authorization: ${secretLikeValue}`), {
