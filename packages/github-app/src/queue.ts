@@ -16,6 +16,17 @@ export class InMemoryJobQueue implements JobQueue {
   private readonly jobs: PullRequestJob[] = [];
   private readonly latestEvents = new Map<string, number>();
 
+  private executionKey(job: PullRequestJob): string {
+    const jobKey = pullRequestJobKey(job);
+
+    // A reopened action starts a new valid PR lifecycle even when the head SHA
+    // is unchanged. Its update timestamp is shared by redeliveries of that
+    // lifecycle, so concurrent deliveries still collapse to one run.
+    return job.action === "reopened"
+      ? `${jobKey}:reopened:${job.updatedAt}`
+      : jobKey;
+  }
+
   async enqueue(job: PullRequestJob): Promise<EnqueueResult> {
     const jobKey = pullRequestJobKey(job);
     if (this.deliveries.has(job.deliveryId)) {
@@ -33,11 +44,12 @@ export class InMemoryJobQueue implements JobQueue {
       this.latestEvents.set(identity, job.updatedAt);
     }
 
-    if (this.runStatuses.has(jobKey)) {
+    const executionKey = this.executionKey(job);
+    if (this.runStatuses.has(executionKey)) {
       return { status: "duplicate_head", jobKey };
     }
 
-    this.runStatuses.set(jobKey, "queued");
+    this.runStatuses.set(executionKey, "queued");
     this.jobs.push(job);
     return { status: "queued", jobKey };
   }
@@ -45,13 +57,13 @@ export class InMemoryJobQueue implements JobQueue {
   async claimNext(): Promise<PullRequestJob | undefined> {
     const job = this.jobs.shift();
     if (job) {
-      this.runStatuses.set(pullRequestJobKey(job), "running");
+      this.runStatuses.set(this.executionKey(job), "running");
     }
     return job;
   }
 
   async mark(job: PullRequestJob, status: Exclude<JobStatus, "queued" | "running">): Promise<void> {
-    this.runStatuses.set(pullRequestJobKey(job), status);
+    this.runStatuses.set(this.executionKey(job), status);
   }
 
   pendingCount(): number {
@@ -59,6 +71,6 @@ export class InMemoryJobQueue implements JobQueue {
   }
 
   statusFor(job: PullRequestJob): JobStatus | undefined {
-    return this.runStatuses.get(pullRequestJobKey(job));
+    return this.runStatuses.get(this.executionKey(job));
   }
 }
